@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tmux-mcp-tools"
+version = "0.1.0"
+description = "MCP server for tmux operations"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "fastmcp"
+]
+
+[project.scripts]
+tmux-mcp-tools = "tmux_mcp_tools.server:main"
+
