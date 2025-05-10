@@ -17,6 +17,9 @@ from pydantic import BaseModel, Field
 # Create FastMCP server
 mcp = FastMCP(name="TmuxTools", on_duplicate_tools="error")
 
+# Global delay setting (will be set from command line args)
+ENTER_DELAY = 0.4  # Default delay before sending C-m (Enter) for commands and file operations
+
 
 @mcp.tool(
     description="Capture the content of a tmux pane and return it as text.",
@@ -107,8 +110,8 @@ def tmux_send_command(
             check=True
         )
         
-        time.sleep(0.4)
-        # Send Enter key (C-m)
+        # Send Enter key (C-m) with configurable delay
+        time.sleep(ENTER_DELAY)  # Use global delay setting
         subprocess.run(
             ["tmux", "send-keys", "-t", target_pane, "C-m"],
             check=True
@@ -176,13 +179,40 @@ def tmux_write_file(
         ["tmux", "send-keys", "-t", target_pane, "EOF"],
         check=True
     )
-    time.sleep(0.4)
+    
+    time.sleep(ENTER_DELAY)  # Use global delay setting for file operations
     subprocess.run(
         ["tmux", "send-keys", "-t", target_pane, "C-m"],
         check=True
     )
     
-    return f"Successfully wrote to file {file_path}"
+    # Verify the file was written by checking if it exists and capturing the result
+    verify_cmd = f"[ -f {file_path} ] && echo 'File {file_path} was successfully written' || echo 'Failed to write file {file_path}'"
+    subprocess.run(
+        ["tmux", "send-keys", "-t", target_pane, verify_cmd],
+        check=True
+    )
+
+    subprocess.run(
+        ["tmux", "send-keys", "-t", target_pane, "C-m"],
+        check=True
+    )
+    
+    # Wait for command to execute
+    time.sleep(0.2)
+    
+    # Capture the output to get the verification result
+    result = subprocess.run(
+        ["tmux", "capture-pane", "-p", "-t", target_pane],
+        check=True, 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.PIPE, 
+        text=True
+    )
+    
+    # Extract the last non-empty line which should contain our verification result
+    output_lines = [line for line in result.stdout.split('\n') if line.strip()]
+    return output_lines[-1] if output_lines else f"Unable to verify if file {file_path} was written successfully"
 
 
 def get_mcp_server():
@@ -210,8 +240,18 @@ def main():
         default=8080,
         help="Port to bind to for HTTP transport (default: 8080)"
     )
+    parser.add_argument(
+        "--enter-delay",
+        type=float,
+        default=0.4,
+        help="Delay in seconds before sending Enter (C-m) for commands and file operations (default: 0.4)"
+    )
     
     args = parser.parse_args()
+    
+    # Set global delay setting from command line argument
+    global ENTER_DELAY
+    ENTER_DELAY = args.enter_delay
     
     # Start server with appropriate transport
     try:
