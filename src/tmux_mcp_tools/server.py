@@ -15,7 +15,7 @@ from fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
 # Create FastMCP server
-mcp = FastMCP(name="TmuxTools", on_duplicate_tools="error")
+mcp = FastMCP(name="TmuxTools", on_duplicate_tools="error", log_level="WARNING")
 
 # Global delay setting (will be set from command line args)
 ENTER_DELAY = 0.5  # Default delay before sending C-m (Enter) for commands and file operations
@@ -62,7 +62,7 @@ def tmux_send_text(target_pane, text, with_enter=False, literal_mode=False):
     tags={"tmux", "capture", "pane"}
 )
 def tmux_capture_pane(
-    target_pane: Annotated[str, Field(description="Target pane identifier (e.g., '0', '1.2', ':1.0')")] = "1",
+    target_pane: Annotated[str, Field(description="Target pane identifier (e.g., '0', '1.2', ':1.0', '%1').")] = "0",
     delay: Annotated[float, Field(description="Delay in seconds before capturing (0-10)", ge=0, le=10)] = 0.2
 ) -> str:
     """
@@ -90,7 +90,7 @@ def tmux_capture_pane(
 )
 def tmux_send_keys(
     keys: Annotated[List[str], Field(description="List of keys for `tmux send-send`. Escape for ESC, C-m for Enter.")],
-    target_pane: Annotated[str, Field(description="Target pane identifier (e.g., '0', '1.2', ':1.0')")] = "1"
+    target_pane: Annotated[str, Field(description="Target pane identifier (e.g., '0', '1.2', ':1.0', '%1').")] = "0"
 ) -> str:
     """
     Send keys or commands to a tmux pane without automatically appending Enter.
@@ -112,7 +112,7 @@ def tmux_send_keys(
 )
 def tmux_send_command(
     commands: Annotated[List[str], Field(description="Commands to send (list of strings)")],
-    target_pane: Annotated[str, Field(description="Target pane identifier (e.g., '0', '1.2', ':1.0')")] = "1",
+    target_pane: Annotated[str, Field(description="Target pane identifier (e.g., '0', '1.2', ':1.0', '%1').")] = "0",
     delay: Annotated[float, Field(description="Delay in seconds before capturing output (0-10)", ge=0, le=10)] = 0.5
 ) -> str:
     """
@@ -148,7 +148,7 @@ def tmux_send_command(
 def tmux_write_file(
     file_path: Annotated[str, Field(description="Path to the file to write")],
     content: Annotated[str, Field(description="Content to write to the file")],
-    target_pane: Annotated[str, Field(description="Target pane identifier (e.g., '0', '1.2', ':1.0')")] = "1"
+    target_pane: Annotated[str, Field(description="Target pane identifier (e.g., '0', '1.2', ':1.0', '%1').")] = "0"
 ) -> str:
     """
     Write content to a file using the heredoc pattern in a tmux pane.

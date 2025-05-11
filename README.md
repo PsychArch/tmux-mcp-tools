@@ -1,9 +1,16 @@
 # tmux-mcp-tools
 
-A Model Context Protocol (MCP) server that provides tools for interacting with tmux sessions.
+Provide MCP tools for interacting with tmux sessions.
 
-## Installation
+## Tmux Configuration
 
+Add the following to your `.tmux.conf` file to create a keybinding that opens the client in a new pane:
+
+```bash
+bind-key M-k split-window -h -p 33 "uvx tmux-agent --from tmux-mcp-tools --target $(tmux display-message -p '#{pane_index}');"
+```
+
+This will bind Alt+K to open a new pane with the client, targeting the current pane.
 
 ## Features
 
