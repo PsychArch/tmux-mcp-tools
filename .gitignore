@@ -89,6 +89,8 @@ env.save/
 # IDEs and editors
 .idea/
 .vscode/
+.windsurf/
+.cursor/
 *.swp
 
 # Lock files
