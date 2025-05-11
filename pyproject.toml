@@ -4,15 +4,17 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tmux-mcp-tools"
-version = "0.1.2"
+version = "0.2.0"
 description = "MCP server for tmux operations"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
-    "fastmcp"
+    "fastmcp",
+    "openai>=1.78.0",
 ]
 
 [project.scripts]
 tmux-mcp-tools = "tmux_mcp_tools.server:main"
+tmux-agent = "tmux_mcp_tools.client:run_main"
 
