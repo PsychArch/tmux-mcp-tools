@@ -18,9 +18,45 @@ from pydantic import BaseModel, Field
 mcp = FastMCP(name="TmuxTools", on_duplicate_tools="error")
 
 # Global delay setting (will be set from command line args)
-ENTER_DELAY = 0.4  # Default delay before sending C-m (Enter) for commands and file operations
+ENTER_DELAY = 0.5  # Default delay before sending C-m (Enter) for commands and file operations
 
 
+def tmux_send_text(target_pane, text, with_enter=False, literal_mode=False):
+    """
+    Helper function to send text to a tmux pane with proper semicolon handling.
+    
+    Args:
+        target_pane: The tmux pane identifier
+        text: The text to send
+        with_enter: Whether to send an Enter key (C-m) after the text
+        literal_mode: Whether to use literal mode (-l flag) for sending text
+    """
+    # Escape semicolons if they appear at the end of the text
+    if text.endswith(";") and not text.endswith("\\;"):
+        text = text[:-1] + "\\;"
+    
+    # Handle special cases
+    if text == "C-[":
+        # Convert C-[ to Escape for better compatibility
+        cmd = ["tmux", "send-keys", "-t", target_pane, "Escape"]
+    else:
+        # Use the text as provided
+        cmd = ["tmux", "send-keys"]
+        if literal_mode:
+            cmd.append("-l")
+        cmd.extend(["-t", target_pane, text])
+    
+    # Execute the command
+    subprocess.run(cmd, check=True)
+    
+    # Send Enter key if requested
+    if with_enter:
+        time.sleep(ENTER_DELAY)  # Use global delay setting
+        subprocess.run(
+            ["tmux", "send-keys", "-t", target_pane, "C-m"],
+            check=True
+        )
+    
 @mcp.tool(
     description="Capture the content of a tmux pane and return it as text.",
     tags={"tmux", "capture", "pane"}
@@ -65,24 +101,7 @@ def tmux_send_keys(
     
     # Process each key/command in the list
     for key in keys:
-        # Handle special cases
-        if key == "C-[":
-            # Convert C-[ to Escape for better compatibility
-            cmd = ["tmux", "send-keys", "-t", target_pane, "Escape"]
-        elif key.endswith(";") and not key.endswith("\\;"):
-            # Handle semicolons at the end of a string by escaping them
-            # This prevents tmux from interpreting them as command separators
-            escaped_key = key[:-1] + "\\;"
-            cmd = ["tmux", "send-keys", "-t", target_pane, escaped_key]
-        else:
-            # Use the key as provided
-            cmd = ["tmux", "send-keys", "-t", target_pane, key]
-        
-        # Execute the command
-        subprocess.run(cmd, check=True)
-        
-        # Small delay to avoid overwhelming the terminal
-        time.sleep(0.05)
+        tmux_send_text(target_pane, key)
     
     return f"Keys sent successfully to pane {target_pane}"
 
@@ -104,21 +123,7 @@ def tmux_send_command(
     
     # Process each command in the list
     for command in commands:
-        # Send the command
-        subprocess.run(
-            ["tmux", "send-keys", "-t", target_pane, "-l", command],
-            check=True
-        )
-        
-        # Send Enter key (C-m) with configurable delay
-        time.sleep(ENTER_DELAY)  # Use global delay setting
-        subprocess.run(
-            ["tmux", "send-keys", "-t", target_pane, "C-m"],
-            check=True
-        )
-        
-        # Small delay to avoid overwhelming the terminal
-        time.sleep(0.05)
+        tmux_send_text(target_pane, command, with_enter=True, literal_mode=True)
     
     # Apply delay before capturing output
     if delay > 0:
@@ -153,50 +158,22 @@ def tmux_write_file(
         return "Error: No file path specified"
     
     # Start the heredoc command
-    subprocess.run(
-        ["tmux", "send-keys", "-t", target_pane, f"cat > {file_path} << 'EOF'"],
-        check=True
-    )
-    subprocess.run(
-        ["tmux", "send-keys", "-t", target_pane, "C-m"],
-        check=True
-    )
+    tmux_send_text(target_pane, f"cat > {file_path} << 'EOF'", with_enter=True)
     
     # Send the content line by line
     for line in content.split('\n'):
-        subprocess.run(
-            ["tmux", "send-keys", "-t", target_pane, line],
-            check=True
-        )
-        subprocess.run(
-            ["tmux", "send-keys", "-t", target_pane, "C-m"],
-            check=True
-        )
+        # Send each line without automatic Enter to avoid delays
+        tmux_send_text(target_pane, line, with_enter=False, literal_mode=True)
+        # Send a newline manually after each line
+        tmux_send_text(target_pane, "C-m", with_enter=False)
     
     
     # End the heredoc
-    subprocess.run(
-        ["tmux", "send-keys", "-t", target_pane, "EOF"],
-        check=True
-    )
-    
-    time.sleep(ENTER_DELAY)  # Use global delay setting for file operations
-    subprocess.run(
-        ["tmux", "send-keys", "-t", target_pane, "C-m"],
-        check=True
-    )
+    tmux_send_text(target_pane, "EOF", with_enter=True)
     
     # Verify the file was written by checking if it exists and capturing the result
     verify_cmd = f"[ -f {file_path} ] && echo 'File {file_path} was successfully written' || echo 'Failed to write file {file_path}'"
-    subprocess.run(
-        ["tmux", "send-keys", "-t", target_pane, verify_cmd],
-        check=True
-    )
-
-    subprocess.run(
-        ["tmux", "send-keys", "-t", target_pane, "C-m"],
-        check=True
-    )
+    tmux_send_text(target_pane, verify_cmd, with_enter=True)
     
     # Wait for command to execute
     time.sleep(0.2)
@@ -210,9 +187,10 @@ def tmux_write_file(
         text=True
     )
     
-    # Extract the last non-empty line which should contain our verification result
+    # Extract the last three lines from the output
     output_lines = [line for line in result.stdout.split('\n') if line.strip()]
-    return output_lines[-1] if output_lines else f"Unable to verify if file {file_path} was written successfully"
+    lines_to_return = output_lines[-3:] if len(output_lines) >= 3 else output_lines
+    return '\n'.join(lines_to_return)
 
 
 def get_mcp_server():
