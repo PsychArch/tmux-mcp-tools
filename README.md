@@ -7,7 +7,7 @@ Provide MCP tools for interacting with tmux sessions.
 Add the following to your `.tmux.conf` file to create a keybinding that opens the client in a new pane:
 
 ```bash
-bind-key M-k split-window -h -p 33 "uvx --from tmux-mcp-tools tmux-agent --target $(tmux display-message -p '#{pane_index}');"
+bind-key M-k split-window -h -p 33 "uvx --from tmux-mcp-tools tmux-agent --target \"$(tmux display-message -t ! -p '#{pane_id}')\" ;"
 ```
 
 This will bind Alt+K to open a new pane with the client, targeting the current pane.

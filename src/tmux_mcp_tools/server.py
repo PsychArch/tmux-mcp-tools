@@ -118,28 +118,58 @@ def tmux_send_command(
     """
     Send commands to a tmux pane, automatically appending Enter after each command.
     """
-    if not commands:
-        return "Error: No commands specified"
+    
+    # Get cursor position and history size before sending command
+    before_cmd_format = "#{cursor_x},#{cursor_y},#{history_size},#{pane_height}"
+    before_cmd = subprocess.run(
+        ["tmux", "display-message", "-p", "-t", target_pane, before_cmd_format],
+        check=True, stdout=subprocess.PIPE, text=True
+    )
+    before_x, before_y, before_history, pane_height = map(
+        int, before_cmd.stdout.strip().split(','))
     
     # Process each command in the list
     for command in commands:
-        tmux_send_text(target_pane, command, with_enter=True, literal_mode=True)
-    
-    # Apply delay before capturing output
+        tmux_send_text(target_pane, command, with_enter=True)
+
+    # Wait for commands to execute and output to stabilize
     if delay > 0:
         time.sleep(delay)
-    
-    # Capture pane content after commands execution
-    result = subprocess.run(
-        ["tmux", "capture-pane", "-p", "-t", target_pane],
-        check=True, 
-        stdout=subprocess.PIPE, 
-        stderr=subprocess.PIPE, 
-        text=True
-    )
-    
-    return result.stdout
 
+    # Get cursor position and history size after command execution
+    after_cmd_format = "#{cursor_x},#{cursor_y},#{history_size}"
+    after_cmd = subprocess.run(
+        ["tmux", "display-message", "-p", "-t", target_pane, after_cmd_format],
+        check=True, stdout=subprocess.PIPE, text=True
+    )
+    after_x, after_y, after_history = map(
+        int, after_cmd.stdout.strip().split(','))
+
+    # Step 1: Compute total_output_lines
+    cursor_y_diff = after_y - before_y
+    history_diff = after_history - before_history
+    
+    # -1 is to remove the command line itself
+    total_output_lines = cursor_y_diff + history_diff - 1
+    
+    # If no output detected, return empty string
+    if total_output_lines <= 0:
+        return ""
+    
+    # Step 2: Capture the output
+    # End is always the line before the current cursor position
+    end_line = after_y - 1
+    
+    # Start is computed based on how many lines we need to capture
+    # This can be negative (to capture lines that have scrolled off)
+    start_line = end_line - total_output_lines + 1
+    
+    # Capture the content
+    capture_cmd = ["tmux", "capture-pane", "-p", "-t", target_pane,
+                  "-S", str(start_line), "-E", str(end_line)]
+    result = subprocess.run(capture_cmd, check=True, stdout=subprocess.PIPE, text=True)
+    
+    return result.stdout.strip()
 
 @mcp.tool(
     name="tmux_write_file",
