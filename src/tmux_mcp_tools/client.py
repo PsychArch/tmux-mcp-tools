@@ -260,8 +260,6 @@ async def main():
     try:
         await agent.connect_to_server(TMUX_MCP_SERVER_CONFIG)
         await agent.run()
-    except KeyboardInterrupt:
-        print("\nShutting down due to keyboard interrupt...")
     except Exception as e:
         print(f"\nError: {str(e)}")
         import traceback
@@ -279,8 +277,6 @@ def run_main():
 if __name__ == "__main__":
     try:
         run_main()
-    except KeyboardInterrupt:
-        print("\nExiting due to keyboard interrupt.")
     except Exception as e:
         print(f"\nUnhandled exception: {e}")
         import traceback
