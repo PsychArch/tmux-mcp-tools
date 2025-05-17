@@ -24,6 +24,9 @@ TMUX_MCP_SERVER_CONFIG = {
     "env": None
 }
 
+# Default enter delay
+DEFAULT_ENTER_DELAY = "0.4"
+
 def convert_tool_format(tool):
     """Convert MCP tool definitions to OpenAI tool definitions"""
     converted_tool = {
@@ -148,16 +151,19 @@ class UserInteractionManager:
     
     def get_user_input(self) -> str:
         """Get input from the user"""
-        query = input("\nRequest: ").strip()
-        if query.lower() in ["quit", "exit", '']:
+        try:
+            query = input("Request: ").strip()
+            if query.lower() == '':
+                self.exit_requested = True
+            return query
+        except EOFError:
             self.exit_requested = True
-        return query
+            return ""
     
     def display_result(self, result: str) -> None:
         """Display a result to the user"""
         if result:
-            print("Result:")
-            print(result)
+            print("Agent: ", result)
     
     def should_exit(self) -> bool:
         """Check if the user has requested to exit"""
@@ -166,11 +172,12 @@ class UserInteractionManager:
 
 # Main Agent Class
 class TmuxAgent:
-    def __init__(self, target_pane: str = "0", model: str = DEFAULT_MODEL):
+    def __init__(self, target_pane: str = "0", model: str = DEFAULT_MODEL, enter_delay: str = DEFAULT_ENTER_DELAY):
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
         self.target_pane = target_pane
         self.model = model
+        self.enter_delay = enter_delay
         self.available_tools = []
         
         # Initialize components
@@ -181,7 +188,16 @@ class TmuxAgent:
 
     async def connect_to_server(self, server_config):
         """Connect to the MCP server"""
-        server_params = StdioServerParameters(**server_config)
+        
+        # Update server config to include enter_delay
+        config_copy = dict(server_config)
+        
+        # We need to adjust the args to include the enter_delay parameter
+        args_copy = list(config_copy.get("args", []))
+        args_copy.extend(["--enter-delay", self.enter_delay])
+        config_copy["args"] = args_copy
+        
+        server_params = StdioServerParameters(**config_copy)
         stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
         self.stdio, self.write = stdio_transport
         self.session = await self.exit_stack.enter_async_context(ClientSession(self.stdio, self.write))
@@ -253,17 +269,15 @@ async def main():
                         help="Target tmux pane (default: 0)")
     parser.add_argument("--model", dest="model", default=DEFAULT_MODEL,
                         help=f"LLM model to use (default: {DEFAULT_MODEL})")
+    parser.add_argument("--enter-delay", dest="enter_delay", default=DEFAULT_ENTER_DELAY,
+                        help=f"Delay in seconds before sending Enter key, or 'infinite' for manual confirmation (default: {DEFAULT_ENTER_DELAY})")
     args = parser.parse_args()
     
     # Initialize and run the agent
-    agent = TmuxAgent(target_pane=args.target_pane, model=args.model)
+    agent = TmuxAgent(target_pane=args.target_pane, model=args.model, enter_delay=args.enter_delay)
     try:
         await agent.connect_to_server(TMUX_MCP_SERVER_CONFIG)
         await agent.run()
-    except Exception as e:
-        print(f"\nError: {str(e)}")
-        import traceback
-        traceback.print_exc()
     finally:
         try:
             await agent.cleanup()
@@ -275,9 +289,4 @@ def run_main():
     asyncio.run(main())
 
 if __name__ == "__main__":
-    try:
-        run_main()
-    except Exception as e:
-        print(f"\nUnhandled exception: {e}")
-        import traceback
-        traceback.print_exc()
+    run_main()
