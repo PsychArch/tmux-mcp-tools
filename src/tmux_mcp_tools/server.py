@@ -188,7 +188,7 @@ def tmux_write_file(
         return "Error: No file path specified"
     
     # Start the heredoc command
-    tmux_send_text(target_pane, f"cat > {file_path} << 'EOF'", with_enter=True)
+    tmux_send_text(target_pane, f"cat > {file_path} << 'TMUX_MCP_TOOLS_EOF'", with_enter=True)
     
     # Send the content line by line
     for line in content.split('\n'):
@@ -199,7 +199,7 @@ def tmux_write_file(
     
     
     # End the heredoc
-    tmux_send_text(target_pane, "EOF", with_enter=True)
+    tmux_send_text(target_pane, "TMUX_MCP_TOOLS_EOF", with_enter=True)
     
     # Verify the file was written by checking if it exists and capturing the result
     verify_cmd = f"[ -f {file_path} ] && echo 'File {file_path} was successfully written' || echo 'Failed to write file {file_path}'"

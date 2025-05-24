@@ -3,6 +3,7 @@ import asyncio
 import argparse
 import os
 import json
+import sys
 from typing import Optional, List, Dict, Any, Tuple
 from contextlib import AsyncExitStack
 
@@ -14,15 +15,11 @@ from mcp.client.stdio import stdio_client
 from openai import OpenAI
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 
+# Configuration management
+from .config import ConfigManager
+
 # Default model to use with OpenRouter
 DEFAULT_MODEL = "google/gemini-2.5-pro-preview"
-
-# Configuration for the tmux-mcp-tools server
-TMUX_MCP_SERVER_CONFIG = {
-    "command": "uvx",
-    "args": ["tmux-mcp-tools"],
-    "env": None
-}
 
 # Default enter delay
 DEFAULT_ENTER_DELAY = "0.4"
@@ -54,17 +51,12 @@ class LLMResponseHandler:
             api_key=os.environ.get("OPENROUTER_API_KEY")
         )
         self.target_pane = model_kwargs.get('target_pane', '0')
-        self.system_prompt = f"""
-You are an AI assistant specifically designed to help users interact with tmux pane.
-
-## Rules
-
-* Observe (capture pane), reason and act (send keys or commands).
-* You work PROACTIVELY to call tools and do not ask for human confirmation. Find alternative methods by yourself by interacting with terminal.
-
-## Context
-* Target tmux pane is `{self.target_pane}`. 
-"""
+        
+        # Load system prompt from configuration
+        config_manager = ConfigManager()
+        prompt_template = config_manager.load_prompt()
+        self.system_prompt = prompt_template.format(target_pane=self.target_pane)
+        
         self.messages = [
             {
                 "role": "system",
@@ -180,6 +172,9 @@ class TmuxAgent:
         self.enter_delay = enter_delay
         self.available_tools = []
         
+        # Initialize configuration manager
+        self.config_manager = ConfigManager()
+        
         # Initialize components
         self.llm_handler = LLMResponseHandler(model=model, target_pane=target_pane)
         self.user_manager = UserInteractionManager()
@@ -271,12 +266,27 @@ async def main():
                         help=f"LLM model to use (default: {DEFAULT_MODEL})")
     parser.add_argument("--enter-delay", dest="enter_delay", default=DEFAULT_ENTER_DELAY,
                         help=f"Delay in seconds before sending Enter key, or 'infinite' for manual confirmation (default: {DEFAULT_ENTER_DELAY})")
+    parser.add_argument("--config-info", action="store_true",
+                        help="Show configuration file information and exit")
     args = parser.parse_args()
+    
+    # Initialize configuration manager
+    config_manager = ConfigManager()
+    
+    # Show config info if requested
+    if args.config_info:
+        config_manager.print_config_info()
+        return
+    
+    # Load MCP server configuration
+    server_config = config_manager.get_mcp_server_config("tmux-mcp-tools")
+    if not server_config:
+        server_config = config_manager.get_default_mcp_config()["mcpServers"]["tmux-mcp-tools"]
     
     # Initialize and run the agent
     agent = TmuxAgent(target_pane=args.target_pane, model=args.model, enter_delay=args.enter_delay)
     try:
-        await agent.connect_to_server(TMUX_MCP_SERVER_CONFIG)
+        await agent.connect_to_server(server_config)
         await agent.run()
     finally:
         try:
