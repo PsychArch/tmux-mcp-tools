@@ -2,6 +2,12 @@
 
 Provide MCP tools for interacting with tmux sessions.
 
+## Configuration
+
+- **Custom XDG**: `$XDG_CONFIG_HOME/tmux-mcp-tools/`
+- **`mcp.json`**: MCP server configuration following Cursor format
+- **`prompt.md`**: System prompt template for the AI agent
+
 ## Tmux Configuration
 
 Add the following to your `.tmux.conf` file to create a keybinding that opens the client in a new pane:
@@ -22,7 +28,7 @@ This will bind Alt+K to open a new pane with the client, targeting the current p
 ```
 {
   "mcpServers": {
-   "tmux-mcp-tools": {
+    "tmux-mcp-tools": {
       "command": "uvx",
       "args": ["tmux-mcp-tools"]
     }
