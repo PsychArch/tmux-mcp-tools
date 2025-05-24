@@ -6,10 +6,14 @@ providing tools to interact with tmux sessions.
 """
 
 import argparse
+import logging
 import subprocess
 import time
 import sys
 from typing import Annotated, List, Optional, Union
+
+# Configure logging to suppress INFO messages
+logging.basicConfig(level=logging.WARNING)
 
 from fastmcp import FastMCP
 from pydantic import BaseModel, Field

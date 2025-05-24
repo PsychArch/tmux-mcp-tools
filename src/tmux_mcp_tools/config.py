@@ -5,7 +5,7 @@ import os
 import json
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 class ConfigManager:
@@ -49,7 +49,8 @@ class ConfigManager:
             "mcpServers": {
                 "tmux-mcp-tools": {
                     "command": "uvx",
-                    "args": ["tmux-mcp-tools"]
+                    "args": ["tmux-mcp-tools"],
+                    "disabled": False
                 }
             }
         }
@@ -112,6 +113,55 @@ class ConfigManager:
         config = self.load_mcp_config()
         return config.get("mcpServers", {}).get(server_name)
     
+    def get_all_mcp_servers(self) -> Dict[str, Dict[str, Any]]:
+        """Get all MCP server configurations."""
+        config = self.load_mcp_config()
+        return config.get("mcpServers", {})
+    
+    def get_enabled_mcp_servers(self) -> Dict[str, Dict[str, Any]]:
+        """Get all enabled MCP server configurations."""
+        all_servers = self.get_all_mcp_servers()
+        enabled_servers = {}
+        
+        for server_name, server_config in all_servers.items():
+            # Server is enabled if 'disabled' is not present or is False
+            if not server_config.get("disabled", False):
+                enabled_servers[server_name] = server_config
+        
+        return enabled_servers
+    
+    def is_server_enabled(self, server_name: str) -> bool:
+        """Check if a specific MCP server is enabled."""
+        server_config = self.get_mcp_server_config(server_name)
+        if server_config is None:
+            return False
+        # Server is enabled if 'disabled' is not present or is False
+        return not server_config.get("disabled", False)
+    
+    def enable_server(self, server_name: str) -> bool:
+        """Enable a specific MCP server. Returns True if successful."""
+        config = self.load_mcp_config()
+        servers = config.get("mcpServers", {})
+        
+        if server_name not in servers:
+            return False
+        
+        servers[server_name]["disabled"] = False
+        self.save_mcp_config(config)
+        return True
+    
+    def disable_server(self, server_name: str) -> bool:
+        """Disable a specific MCP server. Returns True if successful."""
+        config = self.load_mcp_config()
+        servers = config.get("mcpServers", {})
+        
+        if server_name not in servers:
+            return False
+        
+        servers[server_name]["disabled"] = True
+        self.save_mcp_config(config)
+        return True
+    
     def update_mcp_server_config(self, server_name: str, server_config: Dict[str, Any]) -> None:
         """Update configuration for a specific MCP server."""
         config = self.load_mcp_config()
@@ -133,3 +183,15 @@ class ConfigManager:
         print(f"Config dir: {self.config_dir}")
         print(f"MCP: {self.mcp_config_path} {'✓' if self.mcp_config_path.exists() else '✗'}")
         print(f"Prompt: {self.prompt_config_path} {'✓' if self.prompt_config_path.exists() else '✗'}")
+        
+        # Show MCP server status
+        enabled_servers = self.get_enabled_mcp_servers()
+        all_servers = self.get_all_mcp_servers()
+        
+        if all_servers:
+            print(f"\nMCP Servers ({len(enabled_servers)}/{len(all_servers)} enabled):")
+            for server_name, server_config in all_servers.items():
+                status = "✓" if not server_config.get("disabled", False) else "✗"
+                print(f"  {status} {server_name}")
+        else:
+            print("\nNo MCP servers configured")

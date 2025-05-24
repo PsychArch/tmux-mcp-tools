@@ -20,8 +20,10 @@ This will bind Alt+K to open a new pane with the client, targeting the current p
 
 ## Features
 
+### Tmux Tools
 - `tmux_capture_pane`: Capture the content of a tmux pane
 - `tmux_send_command`: Send commands to a tmux pane with automatic Enter key
+- `tmux_send_keys`: Send keys to a tmux pane without automatic Enter
 - `tmux_write_file`: Write content to a file using heredoc pattern in a tmux pane
 
 ## Usage
