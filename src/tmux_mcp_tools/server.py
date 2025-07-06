@@ -117,7 +117,7 @@ def tmux_send_keys(
 def tmux_send_command(
     commands: Annotated[List[str], Field(description="Commands to send (list of strings)")],
     target_pane: Annotated[str, Field(description="Target pane identifier (e.g., '0', '1.2', ':1.0', '%1').")] = "0",
-    delay: Annotated[float, Field(description="Delay in seconds before capturing output (0-10)", ge=0, le=10)] = 0.5
+    delay: Annotated[float, Field(description="Delay in seconds before capturing output (0-10)", ge=0, le=60)] = 2
 ) -> str:
     """
     Send commands to a tmux pane, automatically appending Enter after each command.
