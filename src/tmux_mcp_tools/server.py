@@ -25,6 +25,42 @@ mcp = FastMCP(name="TmuxTools", on_duplicate_tools="error", log_level="WARNING")
 ENTER_DELAY = 0.5  # Default delay before sending C-m (Enter) for commands and file operations
 
 
+def ensure_pane_normal_mode(target_pane):
+    """
+    Ensure the target pane is in normal mode (not in copy mode, view mode, etc.).
+    
+    Args:
+        target_pane: The tmux pane identifier
+        
+    Returns:
+        bool: True if pane is now in normal mode, False if there was an error
+    """
+    try:
+        # Check if pane is in any mode
+        result = subprocess.run(
+            ["tmux", "display-message", "-p", "-F", "#{pane_in_mode}", "-t", target_pane],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        
+        # If pane is in a mode (returns '1'), exit the mode
+        if result.stdout.strip() == '1':
+            # Use send-keys -t <pane> -X cancel to programmatically exit any mode
+            # This works regardless of user key bindings
+            subprocess.run(
+                ["tmux", "send-keys", "-t", target_pane, "-X", "cancel"],
+                check=True, stderr=subprocess.PIPE
+            )
+            
+            # Small delay to allow mode exit to complete
+            time.sleep(0.1)
+        
+        return True
+        
+    except subprocess.CalledProcessError:
+        # If any command fails, return False to indicate error
+        return False
+
+
 def tmux_send_text(target_pane, text, with_enter=False, literal_mode=False):
     """
     Helper function to send text to a tmux pane with proper semicolon handling.
@@ -67,7 +103,8 @@ def tmux_send_text(target_pane, text, with_enter=False, literal_mode=False):
 )
 def tmux_capture_pane(
     target_pane: Annotated[str, Field(description="Target pane identifier (e.g., '0', '1.2', ':1.0', '%1').")] = "0",
-    delay: Annotated[float, Field(description="Delay in seconds before capturing (0-10)", ge=0, le=10)] = 0.2
+    delay: Annotated[float, Field(description="Delay in seconds before capturing (0-10)", ge=0, le=10)] = 0.2,
+    scroll_back_screens: Annotated[int, Field(description="Number of screens to scroll back (0 = current screen only)", ge=0)] = 0
 ) -> str:
     """
     Capture the content of a tmux pane and return it as text.
@@ -77,9 +114,28 @@ def tmux_capture_pane(
     if delay > 0:
         time.sleep(delay)
     
-    # Capture pane content directly to stdout
+    # Build the capture command
+    cmd = ["tmux", "capture-pane", "-p", "-t", target_pane]
+    
+    # If scroll_back_screens is specified, calculate the start line
+    if scroll_back_screens > 0:
+        # Get pane height to calculate how many lines to go back
+        pane_info = subprocess.run(
+            ["tmux", "display-message", "-p", "-F", "#{pane_height}", "-t", target_pane],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        pane_height = int(pane_info.stdout.strip())
+        
+        # Calculate start line (negative value means going back in history)
+        # -1 because we want to include the current screen as screen 0
+        start_line = -(scroll_back_screens * pane_height)
+        
+        # Add start line parameter to capture command
+        cmd.extend(["-S", str(start_line)])
+    
+    # Capture pane content
     result = subprocess.run(
-        ["tmux", "capture-pane", "-p", "-t", target_pane],
+        cmd,
         check=True, 
         stdout=subprocess.PIPE, 
         stderr=subprocess.PIPE, 
@@ -103,6 +159,10 @@ def tmux_send_keys(
     if not keys:
         return "Error: No keys specified"
     
+    # Ensure pane is in normal mode before sending keys
+    if not ensure_pane_normal_mode(target_pane):
+        return f"Error: Could not ensure pane {target_pane} is in normal mode"
+    
     # Process each key/command in the list
     for key in keys:
         tmux_send_text(target_pane, key)
@@ -122,6 +182,10 @@ def tmux_send_command(
     """
     Send commands to a tmux pane, automatically appending Enter after each command.
     """
+    
+    # Ensure pane is in normal mode before sending commands
+    if not ensure_pane_normal_mode(target_pane):
+        return f"Error: Could not ensure pane {target_pane} is in normal mode"
     
     # Get cursor position and history size before sending command
     before_cmd_format = "#{cursor_x},#{cursor_y},#{history_size},#{pane_height}"
@@ -190,6 +254,10 @@ def tmux_write_file(
     """
     if not file_path:
         return "Error: No file path specified"
+    
+    # Ensure pane is in normal mode before writing file
+    if not ensure_pane_normal_mode(target_pane):
+        return f"Error: Could not ensure pane {target_pane} is in normal mode"
     
     # Start the heredoc command
     tmux_send_text(target_pane, f"cat > {file_path} << 'TMUX_MCP_TOOLS_EOF'", with_enter=True)
