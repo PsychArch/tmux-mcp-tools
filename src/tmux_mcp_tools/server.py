@@ -103,7 +103,7 @@ def tmux_send_text(target_pane, text, with_enter=False, literal_mode=False):
 )
 def tmux_capture_pane(
     target_pane: Annotated[str, Field(description="Target pane identifier (e.g., '0', '1.2', ':1.0', '%1').")] = "0",
-    delay: Annotated[float, Field(description="Delay in seconds before capturing (0-10)", ge=0, le=10)] = 0.2,
+    delay: Annotated[float, Field(description="Delay in seconds before capturing (0-60)", ge=0, le=60)] = 0.2,
     scroll_back_screens: Annotated[int, Field(description="Number of screens to scroll back (0 = current screen only)", ge=0)] = 0
 ) -> str:
     """
