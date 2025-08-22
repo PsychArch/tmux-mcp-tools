@@ -172,7 +172,15 @@ def tmux_send_keys(
 
 @mcp.tool(
     name="tmux_send_command",
-    description="Send commands to a tmux pane, automatically appending Enter after each command.",
+    description="""Send commands to a tmux pane, automatically appending Enter after each command.
+
+CRITICAL: Analyze output to determine command status:
+- COMPLETED: Last line ends with shell prompt ($ # user@host:~$)
+- INTERACTIVE: Last line ends with program prompt ((gdb) >>> mysql> (Pdb))  
+- EXECUTING: No shell prompt OR progress indicators visible
+- BLOCKED: First line shows previous command still running (no shell prompt before new command)
+
+If no shell prompt appears, check first line for blocked previous command or last line for current status. Use tmux_capture_pane to check or tmux_send_keys with ["C-c"] to interrupt.""",
 )
 def tmux_send_command(
     commands: Annotated[List[str], Field(description="Commands to send (list of strings)")],
@@ -217,22 +225,22 @@ def tmux_send_command(
     cursor_y_diff = after_y - before_y
     history_diff = after_history - before_history
     
-    # -1 is to remove the command line itself
-    total_output_lines = cursor_y_diff + history_diff - 1
+    # Include the command line in output for LLM context
+    total_output_lines = cursor_y_diff + history_diff
     
     # If no output detected, return empty string
     if total_output_lines <= 0:
         return ""
     
     # Step 2: Capture the output
-    # End is always the line before the current cursor position
-    end_line = after_y - 1
+    # End is always the current cursor position to include the prompt
+    end_line = after_y
     
     # Start is computed based on how many lines we need to capture
     # This can be negative (to capture lines that have scrolled off)
-    start_line = end_line - total_output_lines + 1
+    start_line = end_line - total_output_lines
     
-    # Capture the content
+    # Capture the content including the current line (prompt)
     capture_cmd = ["tmux", "capture-pane", "-p", "-t", target_pane,
                   "-S", str(start_line), "-E", str(end_line)]
     result = subprocess.run(capture_cmd, check=True, stdout=subprocess.PIPE, text=True)
@@ -275,24 +283,39 @@ def tmux_write_file(
     
     # Verify the file was written by checking if it exists and capturing the result
     verify_cmd = f"[ -f {file_path} ] && echo 'File {file_path} was successfully written' || echo 'Failed to write file {file_path}'"
-    tmux_send_text(target_pane, verify_cmd, with_enter=True)
+    # Send command without enter and capture cursor position after command
+    tmux_send_text(target_pane, verify_cmd, with_enter=False)
+    
+    # Get cursor position after command is typed (but not executed)
+    after_command = subprocess.run(
+        ["tmux", "display-message", "-p", "-t", target_pane, "#{cursor_y}"],
+        check=True, stdout=subprocess.PIPE, text=True
+    )
+    command_end_y = int(after_command.stdout.strip())
+    
+    # Now send enter to execute the command
+    tmux_send_text(target_pane, "C-m", with_enter=False)
     
     # Wait for command to execute
     time.sleep(0.2)
     
-    # Capture the output to get the verification result
+    # Get final cursor position after execution
+    after_execution = subprocess.run(
+        ["tmux", "display-message", "-p", "-t", target_pane, "#{cursor_y}"],
+        check=True, stdout=subprocess.PIPE, text=True
+    )
+    final_cursor_y = int(after_execution.stdout.strip())
+    
+    # Calculate capture range: output starts after command line, ends before prompt
+    start_line = command_end_y + 1  # First line after command
+    end_line = final_cursor_y - 1   # Last line before prompt
+    
     result = subprocess.run(
-        ["tmux", "capture-pane", "-p", "-t", target_pane],
-        check=True, 
-        stdout=subprocess.PIPE, 
-        stderr=subprocess.PIPE, 
-        text=True
+        ["tmux", "capture-pane", "-p", "-t", target_pane, "-S", str(start_line), "-E", str(end_line)],
+        check=True, stdout=subprocess.PIPE, text=True
     )
     
-    # Extract the last three lines from the output
-    output_lines = [line for line in result.stdout.split('\n') if line.strip()]
-    lines_to_return = output_lines[-3:] if len(output_lines) >= 3 else output_lines
-    return '\n'.join(lines_to_return)
+    return result.stdout.strip()
 
 
 def get_mcp_server():

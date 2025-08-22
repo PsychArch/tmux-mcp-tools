@@ -97,3 +97,5 @@ env.save/
 uv.lock
 poetry.lock
 pipfile.lock
+
+.mcp.json
