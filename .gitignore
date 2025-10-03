@@ -99,3 +99,4 @@ poetry.lock
 pipfile.lock
 
 .mcp.json
+CLAUDE.md

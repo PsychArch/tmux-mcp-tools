@@ -1,3 +1,3 @@
 """
-tmux-mcp-tools - MCP server and client for tmux operations
+tmux-mcp-tools - MCP server for tmux operations
 """
