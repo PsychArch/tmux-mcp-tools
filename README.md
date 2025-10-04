@@ -2,17 +2,15 @@
 
 MCP server providing tools for interacting with tmux sessions.
 
-## Features
+## Tools
 
-### Tmux Tools
-- `tmux_capture_pane`: Capture the content of a tmux pane
-- `tmux_send_command`: Send commands to a tmux pane with automatic Enter key
-- `tmux_send_keys`: Send keys to a tmux pane without automatic Enter
-- `tmux_write_file`: Write content to a file using heredoc pattern in a tmux pane
+- **tmux_create_pane**: Create new pane (window or split)
+- **tmux_capture_pane**: Read pane contents with optional delay and scroll-back
+- **tmux_send_keys**: Send raw keystrokes (no auto-Enter) for interactive programs
+- **tmux_send_command**: Execute commands with auto-Enter, optional wait pattern
+- **tmux_write_file**: Write files via heredoc (for remote/SSH environments)
 
-## Usage
-
-Add to your MCP client configuration (e.g., Claude Desktop, Cursor):
+## Configuration
 
 ```json
 {
@@ -25,3 +23,9 @@ Add to your MCP client configuration (e.g., Claude Desktop, Cursor):
 }
 ```
 
+### Options
+
+- `--transport`: `stdio` (default) or `http`
+- `--host`: HTTP host (default: 127.0.0.1)
+- `--port`: HTTP port (default: 8080)
+- `--enter-delay`: Delay before sending Enter in seconds (default: 0.4)
