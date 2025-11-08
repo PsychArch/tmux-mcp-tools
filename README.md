@@ -4,7 +4,7 @@ MCP server providing tools for interacting with tmux sessions.
 
 ## Tools
 
-- **tmux_create_pane**: Create new pane (window or split)
+- **tmux_create_pane**: Must create a dedicated pane before running background servers, REPLs, remote shells, or other long-running tasks
 - **tmux_capture_pane**: Read pane contents with optional delay and scroll-back
 - **tmux_send_keys**: Send raw keystrokes (no auto-Enter) for interactive programs
 - **tmux_send_command**: Execute commands with auto-Enter, optional wait pattern

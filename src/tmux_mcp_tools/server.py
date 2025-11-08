@@ -60,9 +60,9 @@ def main():
     # Start server with appropriate transport
     try:
         if args.transport == "stdio":
-            mcp.run(transport="stdio", show_banner=False)
+            mcp.run(transport="stdio")
         else:
-            mcp.run(transport="http", host=args.host, port=args.port, show_banner=False)
+            mcp.run(transport="http", host=args.host, port=args.port)
     except Exception as e:
         print(f"Error starting server: {str(e)}")
         sys.exit(1)

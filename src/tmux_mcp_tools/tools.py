@@ -10,26 +10,23 @@ from typing import Annotated, List, Optional
 from fastmcp import FastMCP
 from pydantic import Field
 
-from .utils import validate_target_pane, ensure_pane_normal_mode, is_special_key, tmux_send_text
+from .utils import (ensure_pane_normal_mode, is_special_key, tmux_send_text,
+                    validate_target_pane)
 
 
 def tmux_create_pane(
-    split: Annotated[bool, Field(description="Split current pane vertically. Use this if you are a cli agent for quick commands")] = False,
     name: Annotated[Optional[str], Field(description="Optional name for the window")] = None
 ) -> str:
-    """Create a new tmux pane.
+    """Always spin up a dedicated tmux pane before running background, interactive, or remote tasks so servers, REPLs, SSH sessions, and other long commands keep running between tool calls.
 
-    Returns pane identifier in format [session:]window.pane (e.g., "0:1.0" or "1.0").
+    Returns the tmux pane_id (e.g., "%12").
     """
     try:
-        if split:
-            cmd = ["tmux", "split-window", "-v", "-d"]
-        else:
-            cmd = ["tmux", "new-window", "-d"]
-            if name:
-                cmd.extend(["-n", name])
+        cmd = ["tmux", "new-window", "-d"]
+        if name:
+            cmd.extend(["-n", name])
 
-        cmd.extend(["-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"])
+        cmd.extend(["-P", "-F", "#{pane_id}"])
 
         result = subprocess.run(
             cmd,
@@ -38,7 +35,7 @@ def tmux_create_pane(
             stderr=subprocess.PIPE,
             text=True
         )
-        return "Pane: " + result.stdout.strip()
+        return result.stdout.strip()
 
     except subprocess.CalledProcessError as e:
         return f"Error creating pane: {e.stderr}"
@@ -122,7 +119,7 @@ Example:  ["python", "C-m", "import sys", "C-m"], ["C", "-", "m"] for input C-m 
 
     # Ensure pane is in normal mode before sending keys
     if not ensure_pane_normal_mode(target_pane):
-        return f"Error: Could not ensure pane {target_pane} is in normal mode"
+        return f"Error: Could not access pane {target_pane}. The pane may have been closed by the user. Please use tmux_create_pane to create a new pane."
 
     # Process each key/command in the list
     for key in keys:
@@ -136,7 +133,7 @@ Example:  ["python", "C-m", "import sys", "C-m"], ["C", "-", "m"] for input C-m 
 def tmux_send_command(
     commands: Annotated[List[str], Field(description="Commands to send")],
     target_pane: str,
-    delay: Annotated[float, Field(description="Timeout in seconds.", ge=0, le=300)] = 5,
+    delay: Annotated[float, Field(description="Timeout in seconds (max 600).", ge=0, le=600)] = 5,
     wait_for_pattern: Annotated[Optional[str], Field(description="Regex to wait for in the terminal outputs. Polls until match or timeout.")] = None
 ) -> str:
     """Execute commands with automatic Enter.
@@ -155,7 +152,7 @@ def tmux_send_command(
 
     # Ensure pane is in normal mode before sending commands
     if not ensure_pane_normal_mode(target_pane):
-        return f"Error: Could not ensure pane {target_pane} is in normal mode"
+        return f"Error: Could not access pane {target_pane}. The pane may have been closed by the user. Please use tmux_create_pane to create a new pane."
 
     # Get cursor position and history size before sending command
     before_cmd_format = "#{cursor_x},#{cursor_y},#{history_size},#{pane_height}"
@@ -184,7 +181,7 @@ def tmux_send_command(
 
         while time.time() - start_time < delay:
             time.sleep(0.5)
-            
+
             # Get current cursor position and history
             current_info = subprocess.run(
                 ["tmux", "display-message", "-p", "-t", target_pane, "#{cursor_y},#{history_size}"],
@@ -256,7 +253,7 @@ def tmux_write_file(
     content: Annotated[str, Field(description="File content")],
     target_pane: str
 ) -> str:
-    """Write file using heredoc. 
+    """Write file using heredoc.
 
     Mainly for remote environments (SSH, containers) without direct filesystem access.
     """
@@ -271,7 +268,7 @@ def tmux_write_file(
 
     # Ensure pane is in normal mode before writing file
     if not ensure_pane_normal_mode(target_pane):
-        return f"Error: Could not ensure pane {target_pane} is in normal mode"
+        return f"Error: Could not access pane {target_pane}. The pane may have been closed by the user. Please use tmux_create_pane to create a new pane."
 
     # Start the heredoc command
     tmux_send_text(target_pane, f"cat > {file_path} << 'TMUX_MCP_TOOLS_EOF'", with_enter=True)

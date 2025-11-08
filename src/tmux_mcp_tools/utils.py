@@ -7,10 +7,33 @@ import time
 from . import config
 
 
+def pane_exists(target_pane: str) -> bool:
+    """
+    Check if a tmux pane exists.
+
+    Args:
+        target_pane: The pane identifier to check
+
+    Returns:
+        bool: True if pane exists, False otherwise
+    """
+    try:
+        result = subprocess.run(
+            ["tmux", "display-message", "-p", "-F", "#{pane_id}", "-t", target_pane],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        return bool(result.stdout.strip())
+    except subprocess.CalledProcessError:
+        return False
+
+
 def validate_target_pane(target_pane: str) -> str:
     """
-    Validate target_pane format: [session:]window.pane
-    Examples: "0:1.0", "1.0", "mysession:2.1"
+    Validate target_pane format: [session:]window.pane or %pane_id
+    Examples: "0:1.0", "1.0", "mysession:2.1", "%23"
 
     Args:
         target_pane: The pane identifier to validate
@@ -19,31 +42,43 @@ def validate_target_pane(target_pane: str) -> str:
         Validated pane identifier
 
     Raises:
-        ValueError: If pane format is invalid
+        ValueError: If pane format is invalid or pane does not exist
     """
     if not target_pane:
         raise ValueError("Pane identifier cannot be empty")
 
-    # Split by colon to separate session from window.pane
-    parts = target_pane.split(':')
-
-    if len(parts) == 1:
-        # Format: window.pane (session omitted)
-        window_pane = parts[0]
-    elif len(parts) == 2:
-        # Format: session:window.pane
-        window_pane = parts[1]
+    # Check if it's a pane ID format (starts with %)
+    if target_pane.startswith('%'):
+        # Pane ID format: %<number>
+        # Just verify it has at least one character after %
+        if len(target_pane) <= 1:
+            raise ValueError(f"Invalid pane ID format: '{target_pane}'. Expected format: %<number> (e.g., '%23')")
     else:
-        # Too many colons
-        raise ValueError(f"Invalid pane format: '{target_pane}'. Expected format: [session:]window.pane (e.g., '0:1.0' or '1.0')")
+        # Otherwise validate as [session:]window.pane format
+        # Split by colon to separate session from window.pane
+        parts = target_pane.split(':')
 
-    # Validate window.pane format
-    if '.' not in window_pane:
-        raise ValueError(f"Invalid pane format: '{target_pane}'. Expected format: [session:]window.pane (e.g., '0:1.0' or '1.0')")
+        if len(parts) == 1:
+            # Format: window.pane (session omitted)
+            window_pane = parts[0]
+        elif len(parts) == 2:
+            # Format: session:window.pane
+            window_pane = parts[1]
+        else:
+            # Too many colons
+            raise ValueError(f"Invalid pane format: '{target_pane}'. Expected format: [session:]window.pane (e.g., '0:1.0' or '1.0') or %pane_id (e.g., '%23')")
 
-    wp_parts = window_pane.split('.')
-    if len(wp_parts) != 2:
-        raise ValueError(f"Invalid pane format: '{target_pane}'. Expected format: [session:]window.pane (e.g., '0:1.0' or '1.0')")
+        # Validate window.pane format
+        if '.' not in window_pane:
+            raise ValueError(f"Invalid pane format: '{target_pane}'. Expected format: [session:]window.pane (e.g., '0:1.0' or '1.0') or %pane_id (e.g., '%23')")
+
+        wp_parts = window_pane.split('.')
+        if len(wp_parts) != 2:
+            raise ValueError(f"Invalid pane format: '{target_pane}'. Expected format: [session:]window.pane (e.g., '0:1.0' or '1.0') or %pane_id (e.g., '%23')")
+
+    # Check if pane exists
+    if not pane_exists(target_pane):
+        raise ValueError(f"Pane '{target_pane}' not found. It may have been closed by the user. Please use tmux_create_pane to create a new pane.")
 
     return target_pane
 
@@ -56,7 +91,12 @@ def ensure_pane_normal_mode(target_pane):
         target_pane: The tmux pane identifier
 
     Returns:
-        bool: True if pane is now in normal mode, False if there was an error
+        bool: True if pane is now in normal mode
+        str: Error message if pane operation failed
+
+    Note:
+        This function no longer checks if pane exists - that should be done by
+        validate_target_pane before calling this function.
     """
     try:
         # Check if pane is in any mode
@@ -79,8 +119,8 @@ def ensure_pane_normal_mode(target_pane):
 
         return True
 
-    except subprocess.CalledProcessError:
-        # If any command fails, return False to indicate error
+    except subprocess.CalledProcessError as e:
+        # If command fails, it's likely the pane doesn't exist anymore
         return False
 
 
